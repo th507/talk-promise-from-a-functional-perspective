@@ -1,0 +1,1041 @@
+# Promise 慢速入门
+
+Jingwei "John" Liu (刘敬威), [@th507](https://twitter.com/th507), Meituan.com
+<br><a href="http://upload.wikimedia.org/wikipedia/commons/0/06/Nanyang_Walk_slow_lettering_20060317.JPG">Image</a> (CC BY-NC 3.0 US)
+
+---
+
+## 咦？不是讲函数式编程吗？
+
+今天讲的是**用函数式的思维去思考 (think functionally)**
+
+我们也会用函数式的方式来理解一下 Promise 到底是什么
+
+---
+# Warning
+今天讲的内容里面，有一些是数学或是编程中的概念，有一些是我自己理解和解读。
+
+我只算一个数学门外汉，虽说我已尽力检查相关的资料，但若有错误之处，无论是概念方面还是理解方面的错误，还请大家多多指正。
+
+另外，下文中可能不加区分的使用 Promise 表示 Promise 函数本身和 Promise 生成的实例。
+
+---
+
+# Promise 的 API
+- `new Promise(function(resolve, reject) {...})`
+- `Promise.prototype.then(function (val) {...}, function(err) {...})`
+- `Promise.prototype.catch(function() {...}`
+- `Promise.all(...)`
+- `Promise.race(...)`
+
+---
+# 对 Promise 的常见认识
+1. 没啥用啊
+2. 用起来要要改现有代码
+3. 这是用来管理异步调用的工具
+4. Promise 太好用了！我用它管理所有的队列
+
+如果你对 Promise 的认识在上面的范围，那还是稍微有点不够的。
+
+比方说，现在新加入的 `fetch(url)` 是 AJAX 的一个”封装”，那返回的 response 包在一个 Promise 里是合情合理的。
+
+但是为什么解析返回值的 `response.json()` 返回一个 Promise? 这明明是一个同步函数。
+
+你有试过用 Promise 管理**同步**的函数吗？
+
+---
+# 戏说 Promise
+不严谨的说：
+
+Promise is a monad on the category of endofunctor.<br>
+Promise 是自函子范畴上的一个单子。
+
+这当然是有点开玩笑的说法。
+
+**Promise 是什么？**今天的分享就是要回答这个问题。
+
+不过，我们先稍微回顾一下传统的编程方式。
+
+---
+
+# 面相对象与指令式编程
+#### Object Oriented Programming/面相对象编程
+像现实世界的一张快照，描述了那一瞬间内，各个组成部分之间的关系。
+
+#### Procedural Programming/过程式编程
+主要采用程序呼叫 (procedure call) 或函数调用(function call) 进行流程控制。流程由包涵一系列运算步骤的程序 (Procedures)，常式（routines），子程序（subroutines）, 方法（methods），或函数（functions）来控制。
+
+---
+# 当我们在说 FP 的时候我们在说什么
+过程式语言执行的时候，它看到的是一系列有先后顺序的指令，这些指令会直接修改环境中共享的状态。
+
+函数式语言把执行过程看作是一个复杂的表达式，这个表达式接受一定的输入参数，并最终输出结果。在函数式语言里面，往往执行顺序是不固定的，而且函数式编程语言鼓励开发者使用淡化对执行顺序的要求，用更自由的方式组织代码。
+
+函数式编程语言的支持操作函数，并大量使用匿名函数和闭包。
+
+函数式编程语言往往使用尾部调用优化和高阶函数，而不是循环结构。
+
+---
+# 函数式编程: 有什么特别的？
+### Immutability
+减少副作用，减少赋值，降低查错的难度。
+
+### Pattern matching
+更自然的代码形式
+
+### Morphism
+研究更泛化的变换过程，包括 lazy evaluation 等。
+
+---
+# Pattern Matching 模式识别
+数学里的公式
+
+$
+abs(x) = \\left\\{
+  \\begin{array}{lr}
+    -x & : x < 0\\\\
+    x & : x \\ge 0
+  \\end{array}
+\\right.
+$
+
+写代码也可以这样
+Haskell
+```haskell
+factorial :: (Integral a) => a -> a  
+factorial 0 = 1  
+factorial n = n * factorial (n - 1) 
+```
+
+或者 JavaScript
+```javascript
+// 逆序输出字符串 (不考虑 unicode)
+function reverse(str, suffix) {
+	suffix = suffix || "";
+	if (str.length <= 1) return str + suffix;
+	return reverse( str.substr(1), str[0] + suffix);
+}
+```
+
+今天不详细讲这方面。
+
+---
+# Morphism: 惰性求值及其他
+```javascript
+function* powersOf2() {
+  var i = 2;
+  yield i;
+  while (true) yield i *= i;
+}
+
+for (var i of powersOf2()) {
+  console.log(i);
+  if (i > 10000) break;
+}
+```
+---
+# Mutable & Immutable 可变和不可变的
+A mutable data structure can change in value over time without changing its identity.
+
+A immutable data structure cannot change in value over time without changing its identity.
+
+### 想一想
+为什么 JavaScript 的 String 没有 splice 方法？
+
+Java 的 String 和 StringBuilder
+
+---
+# Mutable: 没什么不好？
+#### 副作用
+函数或表达式，除返回值外，还修改了某个状态或者和调用它的函数或外部环境进行了明显地交互，就被称为是**有副作用**的。
+
+```javascript
+var sum = 0;
+for (var i = 0; i < arr.length; i++) {
+	sum = sum + arr[i];
+}
+```
+
+
+意味着你不光要了解一个输入输出，还要清楚过程，当中任何一个环节都可能出错。
+
+---
+# 副作用
+```javascript
+var arr = [1];
+for (var i = 0; i < arr.length; i++) {
+	console.log(arr[i]);
+	// mutating `arr` create an infinite loop
+	arr.push(i);
+}
+```
+
+刚才的循环里面改变了 arr，导致出现了死循环。
+有时候改变 i 也可能造成问题。
+
+---
+# 无处不在的副作用
+除了刚才讲的 `arr`, `i` 可能改变，就连 `arr[i]` 也会出错
+
+```javascript
+var callbacks = [];
+for (var i = 0; i < arr.length; i++) {
+	callback[i] = function() {
+		var args = arguments;
+		setTimeout(function() {
+			arr[i].apply(null, args);
+		}, 0);
+	}
+}
+```
+
+---
+# 副作用编程
+```javascript
+var arr = ["Alice", "Bob"];
+
+function init(arr) {
+	arr.unshift("Adam");
+	// ...
+}
+```
+
+日常编程中间，我们经常使用作用域和可变性来实现副作用。
+
+---
+# Koa 中间件：副作用编程
+```javascript
+// upstream
+app.use(function*(next) {
+	this.someData = { 
+		text: "Hello, world"
+	};
+	yield next;
+});
+
+// downstream
+app.use(function*(next) {
+	this.body = this.someData.text;
+});
+```
+
+>>>一切事物、现象和过程，及其内部各要素、部分、环节，都不是孤立存在的，它们相互作用、相互影响、相互制约。但另一方面事物又存在着相对独立性，即任何事物都同其他事物相区别而相对独立地存在。事物的普遍联系和事物的相对独立存在是互为前提的。
+
+>>> 唯物辩证法
+
+---
+# 过程式编程的缺点
+- 依赖执行顺序
+- 包含自身的状态
+- 依赖状态共享（副作用）
+- 通过副作用影响其他模块/系统
+
+---
+# 半 immutable 的操作: forEach
+`forEach` does not directly mutate the object on which it is called but the object may be mutated by the calls to callback.
+
+```javascript
+arr.forEach(function(value, index) {
+	console.log(value);
+	// still awful, but at lease not creating an infinite loop
+	arr.push(index);
+});
+```
+
+forEach 不只是 for 循环的语法糖。
+
+map 更大程度避免了改变当前数组
+
+reduce 的回调里面连 this 都没有
+
+---
+# 
+<img alt="image::imperative" src="imperative.jpg" style="height:500px">
+
+http://twitter.com/mariofusco/status/571999216039542784/photo/1
+
+---
+# 前端为什么要了解函数式编程
+#### 前端的工作方式
+- 面向过程的函数调用
+- 共享状态/DOM/attr，大量的全局变量和（相当大范围的）局部变量
+- 充满副作用，不容易查错
+	比如说事件、回调 `Y.use(moduleName, callback)` 等
+
+#### 前端的工作范围
+前端的工作范围比较杂：从数据到最终的界面，经过的状态迁移很多。有相当多的功能实际是通过副作用实现的，这意味着排查错误需要对整个运行环境有足够的了解。
+
+---
+# 学一点点函数式编程
+- 怎么减少查错的难度？如何减少副作用？
+- Monad, monoid, functor, ... 这些词汇是说什么？
+
+- 下面这句鬼话到底是在说啥？
+
+	Promise is a group/monoid/semigroup on the category of endofunctor.<br>
+	Promise 是自函子范畴上的一个群/幺半群/半群。
+
+---
+# 说回到 Promise
+Promise 可以看作是一个 typeclass，它定义了一个数据类型。
+
+这个数据类型有一些通用的特性，可以用 Haskell 中的 Monad 来描述。
+
+在 ES6 的范畴里，Promise 是有逆元的（就是说你可以把一个包裹在 Promise 中的值取出来），所以 Promise 有比一般 Monad 更好的特性。
+
+而 Promise 的确可以用来管理异步函数调用，但这不过是它一个良性的”副作用”罢了。Promise 的本质是一个数据类型。
+
+---
+# 讲一点 Category Theory
+- 看数学书像是在看没有注释的代码，定义太多，解释太少。
+- 今天尽可能讲一点定义，举一点例子
+- 学习思维方式，不是具体技巧
+
+---
+
+# 范畴
+.left-column[
+**我们定义范畴如下:**
+- 一个类 $\mathcal{C}$，其元素称为 object
+- 一个类 $hom(\mathcal{C})$，其元素称为态射 (morphism)。每个态射 $f$ 将一个源元素 (domain) $a$ 映射为一个目标元素 (codomain) $b$，其中 $a,b \in \mathcal{C}$，我们称 $f$ 为从 $a$ 到 $b$ 的态射，记为 $f : a \to b$。
+
+	所有 $a$ 到 $b$ 的态射组成的类称为“态射集”，记为 $hom(a, b)$ 或 $C(a, b)$。
+
+- 存在一个单位态射 (identity morphism)，使得对 $\forall x \in \mathcal{C}$ 有 $1_c: x \to x$。
+]
+.right-column[
+![commutive graph](category.png)
+]
+
+---
+# 范畴
+一个二元运算，对 $\forall a,b,c \in \mathcal{C}$，若 $f:a \to b,g:b \to c$, 则 $g \circ f:a \to b$，则称为态射复合 (composition of morphism)，并满足以下两条公理：
+
+**单位元/零对象 (identity)**
+
+$\forall f:A \to B$, 我们有 $ f \circ 1_C = f$ 以及 $1_C \circ f = f$
+	
+**结合律 (associativity)**
+
+$\forall f:a \to b, g:b \to c, h: c \to d$, 我们有 $ (h \circ g) \circ f = h \circ (g \circ f)$
+
+---
+# 范畴还是犯愁？
+是不是已经有胃绞痛的感觉了？
+
+集合是一些元素组成的。现在我们定义一个集合的集合（元集合），它由三部分组成：
+
+首先是一系列的函数。记为 f: a -> b, 或者用更简单的记法，每个函数都满足 f(a) = b。这样的 f 我们称为态射，f 的集合叫做 F。
+
+有了函数还不够，我们还需要输入和输出，才算是完成了一次计算。我们定义 a 都是集合 A 里面的元素，b 是集合 B 里的元素。
+
+那 A, B, F 构成了一个代数系统，我们叫范畴。
+
+---
+# Promise 与范畴
+```javascript
+var promise = new Promise(function(resolve, reject) {
+	resolve(null);
+});
+```
+
+输入一个函数，输出一个 Promise 的实例。
+
+`new Promise(...)` 是一个从函数到 Promise 类型的映射。
+
+函数的集合， `new Promise(...)` 操作和 Promise 类型实例的集合构成了一个范畴。
+
+---
+
+# Functor & endofunctor 函子与自函子
+#### 函子
+- 是范畴之间的态射+映射
+- 可用于描述范畴之间的关系
+- 满足结合率 (正向或反向)
+
+	共变函子（covariant functor) 满足 $F(f \circ g) = F(f) \circ F(g)$
+
+	反变函子（contravariant functor) 满足 $F(g \circ f) = F(f) \circ F(g)$
+
+#### 自函子
+- 函子是范畴之间的关系 $F: \mathcal{C} \to \mathcal{D}$
+- 自函子作用在同一个范畴上 $F: \mathcal{C} \to \mathcal{C}$
+
+---
+# FP 中的函子
+在 FP 里面，Functor 大致可以这么描述：可以被 map over 的类型。
+
+Haskell 中是这么定义的
+```haskell
+class Functor f where 
+	fmap :: (a -> b) -> f a -> f b
+```
+
+接受一个函数 (a -> b)，这个函数从一个类型映射到另一个类型，还接受一个 functor 装有原始的类型，然后会回传一个 functor 装有映射后的类型。
+
+List 的遍历一般也是 Functor。
+
+<img alt="fmap_just" src="pictures/fmap_just.png" style="max-width:100%">
+
+
+Credit: [adit.io]( http://adit.io/posts/2013-04-17-functors,_applicatives,_and_monads_in_pictures.html)
+
+---
+# 自函子的例子
+```
+function add2(num) { return num + 2; }
+
+function map (fn) {
+	return function(num) {
+		return fn(num);
+	};
+}
+
+// 这是一个 (自) 函子
+var calculate = map(add2);
+
+
+calculate(1);
+// -> 3
+```
+
+---
+# 函子的结合
+```javascript
+function add2(num) { return num + 2; }
+function time3(num) { return num * 3;}
+
+function compose(a, b) {
+	return function(num) {
+		return b(a(num));
+	};
+}
+var calculate = map(compose(add2, time3));
+
+
+calculate(1);
+// -> 9
+```
+---
+# 函子的通俗解释
+可以把函子看成一个具体的计算过程。
+
+#### 一些例子
+- Number 类型的加法和乘法
+- Number 类型上的 Math.max
+- List/Array 类型的 concat
+- Set 的 union
+
+---
+
+# Applicative 施用
+Haskell 中是这么定义的
+```haskell
+class (Functor f) => Applicative f where  
+    pure :: a -> f a  
+    (<*>) :: f (a -> b) -> f a -> f b
+```
+
+applicative value 是一个被包裹了一层的基本类型。比方说 Haskell 里面的 Just。
+
+<img alt="applicative_just" src="pictures/applicative_just.png" style="max-width:100%">
+
+Credit: [adit.io]( http://adit.io/posts/2013-04-17-functors,_applicatives,_and_monads_in_pictures.html)
+
+---
+# Applicative/Functor 与 Promise
+
+```javascript
+function sum(a, b) {
+	return a + b;
+}
+
+function reduce(fn) {
+	return function(arr) {
+		return arr.reduce(fn);
+	};
+}
+
+function then(fn) {
+	return function(promise) {
+		return promise.then(fn);
+	};
+}
+```
+
+上面 `reduce` 和 `then` 都是函子。
+
+---
+# 从 Functor 到 Applicative 
+**Functor: 可以被 map over 的函数**
+```haskell
+fmap :: (Functor f) => (a -> b) -> f a -> f b
+```
+
+**Applicative**
+```haskell
+(<*>) :: (Applicative f) => f (a -> b) -> f a -> f b
+```
+
+**怎么给一个 a -> f b 的函数传入一个 f a 的值？**
+
+<img alt="half" src="pictures/half.png" style="max-width:50%">
+<img alt="half_ouch" src="pictures/half_ouch.png" style="max-width:50%">
+
+<small>Credit: [adit.io]( http://adit.io/posts/2013-04-17-functors,_applicatives,_and_monads_in_pictures.html)</small>
+
+---
+
+# Monad 单子
+<br clear>
+.left-column[
+#### 范畴论中的单子
+
+一个范畴上的三元组 $(T, \eta, \mu)$ , 满足：
+
+- $T$ 是一个 $\mathcal{C}$ 上的自函子
+
+- $\eta$ 是一个自然映射 (单位元)，$\eta: 1_\mathcal{C} \to T$
+
+- $\mu$ 是一个自然映射 (bind) ，$T^2 \to T$
+]
+.right-column[
+#### Haskell 中的单子
+满足三个条件
+- a type constructor M;
+- a function return;
+- an operator (>>=) which is pronounced "bind".
+]
+
+---
+# Haskell 中的单子
+- a type constructor M;
+- a function return;
+- an operator (>>=) which is pronounced "bind".
+
+```haskell
+class Monad m where
+	return :: a -> M a
+	(>>=)  :: M a -> (a -> M b) -> M b
+```
+
+<img alt="bind_def" src="pictures/bind_def.png" style="max-width:100%">
+
+
+
+<!--img alt="monad_chain" src="pictures/monad_chain.png" style="max-height:90%; position:absolute;right:20px; top:20px; z-index:1"-->
+
+---
+# 单子的通俗解释
+可以看成是一个处理流程
+
+<img alt="monad-function-pipeline" src="monad-function-pipeline.png" style="max-width:100%">
+
+这样看起来就很接近 Promise 了
+
+[Of Algebirds, Monoids, Monads, and Other Bestiary for Large-Scale Data Analytics](http://www.michael-noll.com/blog/2013/12/02/twitter-algebird-monoid-monad-for-large-scala-data-analytics/)
+---
+
+# 单子的意义
+.left-column[
+这里开始看到函数式编程的思维方式了。和链式调用不同，我们不是把一个变量 (arr) 传来传去，而是想办法把要做的计算做一个折叠，然后一次施加到变量上去。
+
+OOP 里面的链式调用**很多**都是副作用。每个函数都会修改自身/外界状态，然后把共享状态传递给下一个调用者。
+
+反过来，我们不传递变量，而是折叠计算过程，那我们可以减少程序的副作用。
+]
+.right-column[
+	<img alt="monad_io" src="pictures/monad_io.png" style="max-height:500px">
+	
+<small>Credit: [adit.io]( http://adit.io/posts/2013-04-17-functors,_applicatives,_and_monads_in_pictures.html)</small>
+]
+
+---
+
+# OOP 链式调用不好，那 Promise 呢？
+Once a promise is fulfilled or failed, the promise's value MUST not be changed, just as a primitives value.
+
+```javascript
+var promise = Promise.resolve(1);
+var then1 = promise.then(function() {});
+var then2 = then1.then(function() {});
+
+then1 === promise // -> false
+then1 === then2   // -> false
+then2 === promise // -> false
+```
+
+Promise 链条中传递的 resolve value 还是**可变的**，这个等一下再讲。
+
+---
+
+# 单子？为什么要包裹类型
+比方说，我们有一个函数 f(x) 会引入一些副作用，比方说它可能执行出错。那我们对计算过程进组合的时候，接下来的执行可能会受到影响。那怎么办呢？
+
+```javascript
+res = res.body;
+
+res = JSON.parse(res);
+
+// 填充
+element.innerHTML = res.data.html;
+element.style = res.data.style;
+
+```
+
+JSON.parse 有可能出错
+解析出来的结果也可能没有 res.data.html 这个属性，导致报错
+
+---
+# 单子？为什么要包裹类型
+比如说我们希望把数组从某个中枢值处一分为二
+
+```javascript
+function splitArray(arr, value) {
+	var tail = arr.splice( arr.indexOf(value) );
+	var head = arr;
+	return {
+		head: head,
+		tail: tail
+	};
+}
+```
+
+代码有什么问题吗？
+
+---
+# 单子/返回值类型的设计
+`Array.prototype.indexOf(...)` 在找不到的时候会返回 -1
+
+`JSON.parse` 在处理不了的时候会直接 `throw Error`
+
+**错误的处理并不统一，前端需要判断的条件情况各不一样。**
+
+事实上，前端的职责范围太广太杂，很容易就犯下逻辑考虑不周到的情况。
+
+---
+# 怎么设计一个统一、合理的错误格式？
+JavaScript 是弱类型语言，还没有类型不匹配的问题。
+
+强类型语言更麻烦了。如何保证出错的时候输出的类型是一致的？
+
+**可以构造一个新的数据类型，把正确或错误的结果包裹在里面。**这样输出类型就一致了。
+
+---
+# 单子的简单解释
+输出结果包裹为特定类型的作用有很多，我们这里姑且的讨论一下**最简单的用途**：处理错误。
+
+**返回一个包裹在特定类型里面的值。**这个新的数据类型包含了两种可能，一种是成功执行之后的返回值，另一种是执行中出现的错误信息。
+
+JavaScript 里面可以做这样的类比：在 AJAX 请求里面，如果后端发现出错，不要直接输出纯文本的错误信息，而是把错误信息 `json_encode` 成一个对象。
+
+前端可以统一 `res = JSON.parse(res.body)` 后检查，如果有 `res.error` 则认为出错了，反过来，如果没有 `res.error` 则认为数据正常。
+
+---
+# Promise 与单子
+Promise 是一个包裹了正确或错误结果的数据类型。
+
+我们对比一下 Haskell 中的单子和 Promise
+
+#### Haskell 中的单子
+```haskell
+class Monad m where
+	return :: a -> M a 					-- identity
+	(>>=)  :: M a -> (a -> M b) -> M b 	-- bind
+```
+
+#### Promise 满足条件吗：
+- 构造函数?
+- bind?
+
+---
+# Promise 满足条件吗
+.left-column[
+1. 给一个普通类型变量，有一个类型构造函数可以把它包成 Promise。
+
+	事实上，`Promise.resovle(...)` 就是这样的函数。
+
+2. 给定一个 monadic value (Promise 的实例)，以及一个接受普通值的函数，这函数会回传一个 Promise 的实例，bind 后我们会得到一个 Promise 的实例。
+
+不妨认为Promise 就是 JavaScript 世界里的 Maybe
+]
+.right-column[
+<img alt="monad_just" src="pictures/monad_just.png" style="max-width:100%">
+]
+
+---
+# Promise 的 bind
+
+```javascript
+// fpbind 就是我们需要的函数
+var fbind = function(promise) {
+	return promise.then.bind(promise);
+};
+
+// 例子
+fbind( Promise.resolve("/some-file.txt") )(fetch);
+```
+
+Haskell 里面，Monad 是一个 typeclass，只要满足 Monad law，扔给它一个普通函数也是可以的。
+
+```haskell
+ghci> Just 3 >>= \x -> return (x*2)  
+Just 6
+```
+
+我们上面的函数还不能接受普通函数 ( a -> b )，但我们有 Promise.resolve 可以帮忙。
+
+---
+# Promise 的 bind
+稍微改造一下，我们和 Haskell 中的 bind 就相差无几了
+
+```javascript
+// fpbind 就是我们需要的函数
+var fbind = function(promise) {
+	return function(fn) {
+		return promise.then(function(value) {
+			return Promise.resolve(fn(value));
+		});
+	});
+};
+
+// 例子
+fbind( Promise.resolve(3) )(function(num) {
+	return num*2;
+});
+```
+---
+# 移植 Haskell 中的 currying
+比方说我们要计算：
+$f(x, y) = x^2 + y^2$
+
+我们可以一次性的把 x, y 准备好，也可以这样：
+```javascript
+var curry = function (fn, arr) {
+	arr = arr || [];
+    if (arr.length === fn.length) return fn.apply(null, arr);
+   
+	return curry(fn, arr.concat(arr.slice.call(arguments)));
+};
+
+var square = curry(function(x, y) { return x*x + y*y;});
+```
+
+调用的时候
+我们可以一次性传入x, y 
+```
+square(3,4);
+// -> 25
+```
+也可以逐步传入 x, y
+```
+square(3)(4);
+// -> 25
+```
+---
+# Promise 的 bind
+稍微改造一下，我们的 bind 就更 haskell-*y* 了
+
+```javascript
+// curry(fpbind) 就是我们需要的函数
+var fbind = function(promise, fn) {
+	return promise.then(function(value) {
+		return Promise.resolve(fn(value));
+	});
+};
+
+// 例子
+curry(fbind)( Promise.resolve(3) )(function(num) {
+	return num*2;
+});
+
+// 或者一次传入
+curry(fbind)( Promise.resolve(3), function(num) {
+	return num*2;
+});
+
+// 或者是这样
+curry(fbind)()()()()...()()()( Promise.resolve(3), function(num) {
+	return num*2;
+});
+```
+---
+# Promise 管理同步调用
+可能你的第一直觉是：为什么要用 Promise 管理同步函数？
+
+我们可以利用 Promise 这个数据类型的特点，封装可能出错的处理部分，然后可以统一处理，实现更灵活的函数组合。
+
+#### 容易出错的函数
+- property chaining
+- DOM selector chaining
+- parsing AJAX response as JSON
+
+---
+# Promise 管理同步调用：例子
+我们用 PerformanceTiming API 来采集性能数据，比方说某项耗时，就是其中两个值的差。
+
+这会遇到几个问题，
+- 有可能有的浏览器没有 performance.timing 接口，更麻烦的情况是某个版本的IE只有其中的部分接口。
+- 由于缓存的缘故，有时候其中某个接口的数据为0或负数。导致在做完减法之后，数据丧失了意义。
+
+怎么办呢？我们可以在写一个四则运算的封装，每次运算之前都会筛查一遍接口是否存在，然后再筛查一遍数据，剔除不合预期的数据。我们也可以用 Promise 来统一处理单次计算时的错误，这包括了接口存在的检查以及数据合理性的检查。
+
+<img alt="timing-overview" src="timing-overview.png" style="max-width:40%;">
+
+---
+# Promise 管理异步调用
+我们想在页面上调用三个后台接口，做一做简单的数据可视化。
+
+发现 HighCharts 挺简单的，那就开始把。HighCharts 依赖 jQuery？没问题，能用就行。
+
+在我们实际使用中，上面的步骤中每一个都有副作用。
+- 加载 jQuery 引入了全局变量 jQuery/$
+- 加载 HighCharts 引入了全局变量 HighCharts
+- AJAX 请求 三个后台接口，引入了 data1, data2, data3 三个全局变量
+
+于是我们的瀑布图如下：
+
+<div left red>jQuery</div><div left blue>HighCharts</div><div left yellow>data-1</div><div left green>data-2</div><div left purple>data-3</div><div right>Draw</div>
+<div clear></div>
+
+
+---
+# 伪代码
+代码并不复杂
+
+```javascript
+	// pseudocode
+	getScript("jQuery", function() {
+		getScript("HighChart", function() {
+			getData("data-1", function() {
+				getData("data-2", function() {
+					getData("data-3", function() {
+						drawChart(...)
+					})
+				})
+			})
+		})
+	})
+```
+
+呃，缩进太多啦。
+我记得读过 Avoid callback hell 之类的文章，用 Promise 管理异步调用似乎不错。
+
+---
+# 初级开发者: Promise 减少了回调的缩进
+于是代码变成了这样
+
+```javascript
+	// pseudocode
+	promise = new Promise(getScript("jQuery"))
+	.then(getScript("HighChart"))
+	.then(getData("data-1"))
+	.then(getData("data-2"))
+	.then(getData("data-3"))
+	.then(drawChart)
+```
+
+初级开发者开开心心的做别的事情去了。
+
+---
+# 再看看我们想做的事
+
+<br clear>
+
+<div left red>jQuery</div><div left blue>HighCharts</div><div left yellow style="padding-right:10px">data-1</div><div left green style="padding-right:80px">data-2</div><div left purple style="padding-right:50px">data-3</div><div right>Draw</div>
+<div clear></div>
+
+
+
+- HightCharts 任务的执行需要传入全局变量 jQuery：这是一个任务队列
+- 数据获取不依赖 HightCharts：这是一个任务队列
+- 每个数据的获取互相没有依赖：这个任务队列可以并行
+- 获取数据我们可以不依赖 jQuery (比方说用 `fetch`)
+
+
+---
+# 合理的组织程序流程
+
+```javascript
+	//pseudocode
+Promise.all(
+	["data-1", "data-2", "data-3"].map(getData)
+	.concat( getScript("jQuery").then(getScript("HighChart") )
+).then(drawCharts)
+```
+
+**Before**
+
+<div left red>jQuery</div><div left blue>HighCharts</div><div left yellow style="padding-right:10px">data-1</div><div left green style="padding-right:80px">data-2</div><div left purple style="padding-right:50px">data-3</div><div right>Draw</div>
+<div clear></div>
+
+**After**
+
+<div left red>jQuery</div><div left blue>HighCharts</div><div right>Draw</div>
+<div clear></div>
+<div left yellow style="padding-right:10px">data-1</div>
+<div clear></div>
+<div left green style="padding-right:80px">data-2</div>
+<div clear></div>
+<div left purple style="padding-right:50px">data-3</div>
+
+---
+# 赋值与执行顺序
+有了 Promise，我们可以更灵活的组织函数，这对同步和异步函数都很有用。
+
+这是为什么呢？根本原因是赋值本身就是有副作用的。传统的编程方式里面，我们依赖赋值和执行顺序来保证代码的正确性。
+
+有了 Promise 之后，不妨这样理解：我们最基础的每一步操作都是原子的，要实现一个特定的功能（完成特定计算），我们可以把每一个操作完成之后的状态传递给下一个接收方，于是对每一个操作来说，它的状态都是有输入保证的，一个特定的输入可以对应一个特定的输出，这个是可以复现的。
+
+---
+# Promise 来处理 AJAX 请求
+按照刚才的思路，我们来简单设计一下 AJAX 请求的 API
+
+- 首先我们发出请求，输入是一个 String，输出是一个包在 Promise 里的 Response
+- 我们解析 Response 的 body (这个可能是 chunk 传输的），输入是一个 Response, 输出是一个包在 Promise 里的 String
+- 我们做 response.body 解析 JSON 的时候，输入是一个 String，输入是一个 Response, 输出是一个包在 Promise 里的 Object
+
+大概就是这样，每一步都是一个可以组合的纯函数，每一步可能出错的地方都独立开来了，分别返回可预期的结果。
+
+再看看新鲜出炉的 `window.fetch`，它的 API 是不是差不多这样的？
+
+---
+# Promise 与 FP
+回顾一下 FP 的一些特征
+- Pattern Match
+- Immutability
+- Morphism
+
+Promise 的核心是**减少赋值**。
+
+想象一下：一个完全不污染 JS 全局变量的页面。
+
+---
+# 没有全局变量的 JS 设计
+- 如何模块化
+- 如何管理依赖关系/处理加载顺序
+
+---
+
+# 还有时间吗？
+<br>
+
+.left-column[
+[有](#65)
+]
+.right-column[
+[没有](#70)
+]
+
+---
+
+# 思维方式的变化
+- Optional Value
+- Type Inference
+
+---
+# 集合遍历的拓展
+#### 集合的遍历
+- for loop
+- forEach 调用
+
+以上方法都要事先知道集合的内部结构，访问代码和集合本身是紧耦合，无法将访问逻辑从集合类和客户端代码中分离出来，每一种集合对应一种遍历方法，并不通用。
+
+Y.each 在内部实现了多种类型的遍历，但遍历本不应该这么困难的。
+
+
+#### 泛化的遍历：Iterator
+1. 在集合里找到一个值
+2. apply 函数
+3. 指针指向下一个值
+4. 如果所有值都处理完成，返回 null，否则 goto 2
+
+---
+# 泛化的遍历
+通过加上 `[Symbol.iterator]` 方法，我们实现二叉树和其他数据结构的遍历。
+```
+  HTMLCollection.prototype[Symbol.iterator] 
+= NodeList.prototype[Symbol.iterator] 
+= Array.prototype[Symbol.iterator];
+
+for (var element of document.getElementByTagName("*")) {
+	console.log(element);
+} 
+```
+
+---
+# 不是解决具体问题，而是解决一类问题
+还是说遍历
+
+```javascript
+// 比较粗糙的示例
+Object.prototype[Symbol.iterator] = function() {
+	return Object.keys(this).map(function(i) {
+		return this[i];
+	}, this)[Symbol.iterator]();
+};
+
+var a = {a:1,b:2}; 
+for (let value of a) {
+	console.log(value);
+	// -> [1,2]
+}
+```
+
+对象遍历就实现了
+
+---
+# 不是解决具体问题，而是解决一类问题
+再看看规范
+```javascript
+Promise.all ( [[Iterable]] )
+```
+
+刚才我们的代码已经让 Promise.all 支持传入对象了。我们试试看
+```javascript
+var o = {
+	a: Promise.resolve("a"),
+	b: Promise.resolve("b")
+};
+Promise.all(o).then(function(arr) {
+	console.log(arr);
+	// -> ["a", "b"]
+});
+```
+
+稍加改造，我们甚至可以直接把生命周期管理/mt-ajax等功能直接写到 DOM/Virtual DOM 属性上，然后直接
+```javascript
+Promise.all( document.getElementsByClassName("J-hub") ).then(...)
+```
+
+---
+
+# 为什么要学新的编程语言？
+- 改变思维的方式
+- 锻炼在更高层次上思考、抽象的能力
+- 并不是每个地方都适合用 FP，结合紧密的模块内部用 OOP 就很好
+- 了解实现细节并不代表你可以了解这个东西的意义和用途
+
+---
+# 设计模式/编程语言
+
+> 學會了開發工具的操作與程式語言，像是學會了如何使用搖桿上每個按鈕的功能，你學會某個函式如何使用，就像是學會了某個招式。
+
+> 接下來，你發現將某些招式組合起來，可以發揮更大的威力，像是，如果你玩格鬥天王系列，就知道如果讓草薙京把對手踢到空中的時候，就可以施展大蛇薙，這，我們稱之為連續技；如果你平常就熟練這些連續技，又清楚出招的時機，經常可以有效傷害對方，取得不錯的成績。
+
+> Design Pattern 就是這些年來許多軟體工程師所整理出來，在遇到某些類似的時機可以用上，而且提供了一套現成的詞彙，方便你說明你做了什麼，或是打算怎麼做某個東西。
+
+> 有人問我會不會注重、應不應該注重 Design Pattern，這個問題實在有點奇妙…我還沒有看過多少人玩格鬥電玩不練連續技，但也沒有看到有人每次在對戰中，都非要把某套連續技施展出來不可。
+
+> [@zonble](http://zonble.net/archives/2014_04/1607.php)
+
+---
+# Thanks
+#### References
+- [Functors, Applicatives, And Monads In Pictures](http://adit.io/posts/2013-04-17-functors,_applicatives,_and_monads_in_pictures.html)
+- [A Fistful of Monads](http://learnyouahaskell.com/a-fistful-of-monads)
+- [The Iterator protocol](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/The_Iterator_protocol)
+- [PROMISES AND GENERATORS: CONTROL FLOW UTOPIA](http://pag.forbeslindesay.co.uk/)
+- [王盛颐：让我们谈谈 $\lambda$ 演算](https://github.com/txyyss/Lambda-Calculus)
+- 现代应用数学手册: 离散数学卷
+- Categories for the Working Mathematician

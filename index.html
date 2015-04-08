@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Promise慢速入门</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <style type="text/css">
+      /*@import url(http://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);*/
+
+      body {
+        font-family: Helvetica Neue, Helvetica, Arial, Source Han Sans, Hiragino Sans GB, Microsoft YaHei, sans-serif;
+      }
+      p {
+        font-size: 18px;
+      }
+
+      h1, h2, h3 {
+        /*font-family: 'Yanone Kaffeesatz';*/
+        font-weight: 400;
+        margin-bottom: 0;
+      }
+      .remark-slide-container:not(:first-of-type) h1 {
+        font-size: 40px;
+        font-weight: 200;
+        margin-left: -100px;
+        padding-left: 100px;
+        padding-right: 5%;
+        background: #999;
+        color: white;
+        /*display: inline-block;*/
+        
+      }
+      .remark-code, .remark-inline-code { -webkit-font-smoothing: antialiased; }
+      [left] {
+        float: left;
+        padding: 5px 20px;
+        color: white;
+        font-size: 0.8em;
+      }
+      [right] {
+        float: left;
+        padding: 3px 30px;
+        margin-left: 20px;
+        color: black;
+        border: 1px solid black;
+        width: auto;
+        text-align: right;
+        font-size: 0.8em;
+      }
+      [hide] {
+        display: none;
+      }
+      [clear] {
+        clear: both;
+      }
+      [red] {
+        background: crimson;
+      }
+      [blue] {
+        background: blue;
+      }
+      [yellow] {
+        background: brown;
+      }
+      [green] {
+        background: green;
+      }
+      [purple] {
+        background: purple;
+      }
+      [orange] {
+        background: orange;
+      }
+    /* Two-column layout */
+      .left-column {
+        width: 50%;
+        height: 92%;
+        float: left;
+      }
+        .left-column h2:last-of-type, .left-column h3:last-child {
+          color: #000;
+        }
+      .right-column {
+        width: 45%;
+        float: right;
+        /* padding-top: 1em; */
+      }
+
+      .remark-slide-container:first-of-type .remark-slide-content {
+        background: url(slow.jpg);
+        background-repeat: no-repeat;
+        background-size: cover;
+        color: white;
+      }
+      .remark-slide-container:first-of-type .remark-slide-content a,
+      .remark-slide-container:first-of-type .remark-slide-content a:visited {
+        color: white;
+      }
+      .remark-slide-container:first-of-type h1 {
+        position: absolute;
+        bottom: 150px;
+        left: 250px;
+        font-weight: bold;
+        text-shadow: 1px 1px 20px rgba(0,0,0,.5);
+      }
+     .remark-slide-container:first-of-type p {
+        position: absolute;
+        bottom: 50px;
+        left: 250px;
+        margin: 0 auto;
+      }
+
+     table, thead, tbody, tr, td, th {
+        border-collapse: collapse;
+     
+     }
+
+     thead {
+        border-bottom: 1px solid black;
+     }
+
+     td, th {
+        padding: 0 10px;
+     }
+
+    </style>
+  </head>
+  <body>
+    <textarea id=source data-include="fp-talk.ft" hide></textarea>
+    <script src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <!--script src="http://gnab.github.io/remark/downloads/remark-0.10.2.min.js"></script-->
+    <script src="remark-0.10.2.min.js"></script>
+    <script src="csi.min.js"></script>
+    </body>
+</html>
